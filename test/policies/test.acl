@@ -1,0 +1,192 @@
+;;; --------------------------------- Data model
+
+(defmodel department
+  (table "department")
+  (attributes
+    ((id f_department_id primary key))))
+
+(defmodel user
+  (table "auth_user")
+  (attributes
+    ((username username)
+     (activated activated)
+     (id id primary key))))
+
+(defmodel grantedrole
+  (table "v_granted_roles")
+  (attributes
+    ((user user_id references user)
+     (rolename f_permissionstypes_name)
+     (department f_department_id references department))))
+
+(defmodel man
+  (table "man")
+  (attributes
+    ((id f_man_id primary key)
+     (lastname f_man_namel)
+     (firstname f_man_namef))))
+
+(defmodel post
+  (table "manspost")
+  (attributes
+    ((id f_manspost_id primary key)
+     (man f_man_id references man)
+     (department f_department_id references department))))
+
+(defmodel book
+  (table "book")
+  (attributes
+    ((owner f_book_user references user)
+     (id f_book_id primary key)
+     (type f_booktype_id))))
+
+(defmodel authorb
+  (table authorb)
+  (attributes
+    ((id f_authorb_id primary key)
+     (man f_man_id references man)
+     (book f_book_id references book))))
+
+(defmodel article
+  (table "article")
+  (attributes
+    ((id f_article_id primary key)
+     (title f_article_name)
+     (journal f_journal_id)
+     (collection f_collection_id)
+     (owner f_article_user references user))))
+
+(defmodel authora
+  (table "authora")
+  (attributes
+    ((article f_article_id references article)
+     (man f_man_id references man))))
+
+(defmodel artconfirmation
+  ;; Confiramation of articles
+  (table "statistics_rankedarticleauf89f")
+  (attributes
+    ((article article_id references article)
+    (marked_by user_id references user))))
+
+(defmodel course
+  (table "course")
+  (attributes
+    ((id f_course_id primary key)
+     (owner f_course_user references user))))
+
+(defmodel courseteaching
+  (table "readcourse")
+  (attributes
+    ((course f_course_id references course)
+     (man f_man_id references man))))
+
+(defmodel profile
+  (table "workers_profile")
+  (attributes
+    ((man worker_id references man)
+     (user user_id references user))))
+
+;;; ---------------------------------------- concepts
+(defconcept Activity)
+
+(defconcept CoauthoredActivity
+  (inherits Activity))
+
+(defconcept CBook
+  (inherits CoauthoredActivity book)
+  (attributes
+    (authors authorbs)))
+
+(defconcept CArticle
+  (inherits CoauthoredActivity article)
+  (attributes
+    (authors authoras)))
+
+(defconcept CJournalArticle
+  (inherits CArticle)
+  (constraint the(journal) > 0)
+  (attributes
+    (owner_name owner[activated > 3].username))
+  (exclude collection))
+
+(defconcept CCourse
+  (inherits Activity course))
+
+;;; -------------- roles
+(defrole registered-user)
+
+(defrole stuff department) ; parameterized role
+
+(defrole admin department)
+
+(defrole is_representative_for department)
+
+
+;;; ----------------------------------------- rules
+
+(rule owner-modify-activity
+  "Owner can delete activity."
+  (access allow)  ; allow/deny
+  (concept Activity)
+  (grantees (role "registered-user"))
+  (operations delete edit)
+  (constraint object.owner.id = user.id))
+
+(rule admin-modify-activity
+  "Admin of any coauthor can edit activity."
+  (access allow)  ; allow/deny
+  (concept Activity)
+  (grantees
+    (role "is_representative_for" object.owner.profiles.man.posts.department.id))
+  (operations edit delete))
+
+
+(rule coauthor-edit-activity
+  "Any coauthor can edit activity."
+  (access allow)  ; allow/deny
+  (concept CoauthoredActivity)
+  (grantees (role "registered-user"))
+  (operations edit)
+  (constraint some(object.authors.man.id) = user.man_id))
+
+(rule admin-modify-coauthored-activity
+  "Admin of any coauthor can edit activity."
+  (access allow)  ; allow/deny
+  (concept CoauthoredActivity)
+  (grantees (role "registered-user"))
+  (operations edit delete)
+  (constraint some(object.authors.man.posts.department.id) = some(user.grantedroles[rolename="is_representative_for"].department.id)))
+
+
+(rule test-admin-modify-activity
+  "Admin of any coauthor can edit activity."
+  (access deny)  ; allow/deny
+  (concept CoauthoredActivity)
+  (grantees
+    (role "is_representative_for" object.authors.man.posts.department.id))
+  (operations edit delete))
+
+
+(rule confirmed-article-edit
+  "Do not allow to modify confirmed articles."
+  (access deny)
+  (concept CJournalArticle)
+  (grantees (role "registered-user"))
+  (operations edit delete)
+  (constraint some(object.artconfirmations.marked_by.id) > 0))
+
+
+(rule coauthor-modify-journal-article
+  "Do not allow to modify articles with large number of coauthors."
+  (access deny)
+  (concept CJournalArticle)
+  (grantees (role "registered-user"))
+  (operations edit delete)
+  (constraint count(object.authors.man.id) >= 10 and object.owner.id != user.id))
+
+(rule delete-course
+  (access deny)
+  (concept CCourse)
+  (operations delete)
+  (constraint some(object.courseteachings.id) > 0))

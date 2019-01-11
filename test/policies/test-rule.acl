@@ -1,0 +1,60 @@
+(rule name
+  (comment "Описание правила")
+  (access :allow) ;; allow/deny
+  (role "admin") ; Кому выданы права. Может быть (role "xxx") или (user "xxx")
+  (operation "delete")
+  (object-type "article"))
+
+(rule name
+  (comment "Описание правила")
+  (access :allow) ;; allow/deny
+  (role "admin") ; Кому выданы права. Может быть (role "xxx") или (user "xxx")
+  (operation "delete")
+  (object-type "article")
+  ;; В условиях могут использоваться user, role и object (кто и с чем выполняет операцию)
+  ;; и их свойства, которые должны быть описаны в модели
+  ;(condition (= object.owner.department role.department)))
+  (condition (= object.author.department role.department)))
+
+
+(rule den
+  (comment "Описание правила")
+  (access :deny) ;; allow/deny
+  (role "admin") ; Кому выданы права. Может быть (role "xxx") или (user "xxx")
+  (operation "delete")
+  (object-type "article")
+  ;; В условиях могут использоваться user, role и object (кто и с чем выполняет операцию)
+  ;; и их свойства, которые должны быть описаны в модели
+  )
+
+
+
+(rule admin-delete-article
+  ;;"Members of 'admin' role can delete articles if at least on of the coauthors is managed by the admin."
+  (concept article)
+  (access allow)  ; allow/deny
+  (grantees (role "admin" object.authoras.man.posts.department))
+  (operations update))
+
+
+(rule owner-delete-article
+  "Owner can delete article."
+  (access allow)  ; allow/deny
+  (concept article)
+  (grantees (role "stuff" object.authoras.man.posts.department)
+            (role "registered-user")
+            (role "admin" object.authoras.man.posts.department))
+  (operations delete edit)
+  (constraint object.owner[username="safonin" and id <=63 and articles.owner.id=63].id = 63))
+
+
+(rule cant-delete-article
+  (access deny)
+  (concept article)
+  (grantees (role "stuff" object.authoras.man[id>0].posts.department)
+            (user "root")
+            (role "registered-user")
+            (role "admin" object.authoras.man.posts.department))
+  (operations delete edit)
+  ;;
+  (constraint (= object.owner.id 63)))
